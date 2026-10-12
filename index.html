@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cartes">
+<meta name="theme-color" content="#17363a">
+<title>Cartes</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:#17363a;color:#f3efe6;font:16px/1.45 -apple-system,system-ui,sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 6px)}
+#chips{display:flex;gap:8px;overflow-x:auto;padding:12px 0;flex:none;scrollbar-width:none}
+#chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:8px 13px;border-radius:99px;border:1.5px solid #3f6a6e;background:transparent;color:#d6e4e2;font:inherit;font-size:14px}
+.chip.on{background:var(--c);border-color:var(--c);color:#fff}
+#stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;perspective:1400px;padding:6px 0}
+#card{width:100%;max-width:440px;height:100%;max-height:600px;position:relative;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.3,.8,.3,1)}
+#card.open{transform:rotateY(180deg)}
+.f{position:absolute;inset:0;border-radius:20px;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;box-shadow:0 14px 30px rgba(0,0,0,.35)}
+.back{background:var(--c,#3f6a6e);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;border:8px solid rgba(255,255,255,.18)}
+.back b{font-size:96px;font-weight:400}
+.back span{font:italic 20px ui-serif,Georgia,serif;opacity:.9}
+.front{transform:rotateY(180deg);background:#f6f1e4;color:#222;display:flex;flex-direction:column}
+.front img{width:100%;height:36%;object-fit:cover;flex:none;background:var(--c)}
+.noimg{height:14px;flex:none;background:var(--c)}
+.body{padding:16px 18px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+.tag{font-size:13px;font-weight:600;color:var(--c)}
+h2{font:700 27px/1.15 ui-serif,Georgia,serif;margin:3px 0 10px}
+.body p{margin:0 0 12px;font-size:16.5px;color:#333}
+.body a{color:var(--c);font-weight:600}
+#bar{display:flex;gap:8px;flex:none;padding-top:10px}
+button{font:inherit;border:0;border-radius:14px;padding:14px 16px;color:#fff;background:#2c5659}
+#next{flex:1;background:#e9b44c;color:#2a2108;font-weight:700}
+#list{position:fixed;inset:0;background:#17363a;padding:calc(env(safe-area-inset-top) + 16px) 18px 24px;overflow-y:auto;z-index:9}
+#list h3{font:700 24px ui-serif,Georgia,serif;margin:0 0 12px}
+#list a{display:block;color:#f3efe6;padding:11px 0;border-bottom:1px solid #2c5659;text-decoration:none}
+#list button{margin-top:16px;width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="chips"></div>
+<div id="stage"><div id="card" onclick="flip()">
+  <div class="f back" id="bk"><b>🃏</b><span>Touche pour ouvrir</span></div>
+  <div class="f front" id="fr"></div>
+</div></div>
+<div id="bar">
+  <button id="fav" onclick="fav()">☆</button>
+  <button id="next" onclick="next()">Ouvrir une carte</button>
+  <button onclick="showFav(1)">★ <span id="n">0</span></button>
+</div>
+<div id="list" hidden></div>
+<script>
+const D={
+ "🔬 Science":{c:"#2f6fed",k:["Astronomie","Mathématiques","Informatique","Technologie"]},
+ "🧬 Biologie":{c:"#2e9e5b",k:["Biologie","Zoologie","Botanique","Génétique","Écologie"]},
+ "⚗️ Physique-chimie":{c:"#8a4fd6",k:["Physique","Chimie"]},
+ "🏛️ Histoire":{c:"#b5651d",k:["Histoire"]},
+ "🌍 Géographie":{c:"#0e8f9c",k:["Géographie"]},
+ "🪨 Géologie":{c:"#8c6d4f",k:["Géologie","Volcanologie","Minéralogie"]},
+ "🩺 Médecine":{c:"#d6455d",k:["Médecine","Anatomie","Maladie"]}
+};
+const $=id=>document.getElementById(id);
+const sel=new Set(),Q={},P={},seen=new Set();
+let cur=null,favs=[];
+try{favs=JSON.parse(localStorage.getItem("fav")||"[]")}catch(e){}
+const saveFav=()=>{try{localStorage.setItem("fav",JSON.stringify(favs))}catch(e){}$("n").textContent=favs.length;$("fav").textContent=cur&&favs.some(f=>f.t==cur.t)?"★":"☆"};
+saveFav();
+
+Object.keys(D).forEach(k=>{
+  const b=document.createElement("button");b.className="chip";b.textContent=k;b.style.setProperty("--c",D[k].c);
+  b.onclick=()=>{sel.has(k)?sel.delete(k):sel.add(k);b.classList.toggle("on")};
+  $("chips").appendChild(b);
+});
+
+async function load(d){
+  let max=3000;
+  for(let t=0;t<5;t++){
+    const c=D[d].k[Math.random()*D[d].k.length|0],off=Math.random()*max|0;
+    const u="https://fr.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrsearch="+encodeURIComponent('deepcat:"'+c+'"')+"&gsrnamespace=0&gsrlimit=15&gsroffset="+off+"&prop=extracts|pageimages&exintro=1&explaintext=1&exlimit=max&exchars=800&piprop=thumbnail&pithumbsize=700";
+    const r=await(await fetch(u)).json();
+    const p=Object.values(r.query?.pages||{}).filter(x=>x.extract&&x.extract.length>150&&!seen.has(x.title));
+    if(p.length)return p.sort(()=>Math.random()-.5).map(x=>({t:x.title,x:x.extract,i:x.thumbnail?.source,d}));
+    max=Math.floor(max/4);
+  }
+  return [];
+}
+const pull=d=>P[d]??=load(d).then(x=>(Q[d]??=[]).push(...x)).catch(()=>{}).finally(()=>P[d]=null);
+
+async function next(){
+  const ds=sel.size?[...sel]:Object.keys(D),d=ds[Math.random()*ds.length|0];
+  $("card").classList.remove("open");$("next").textContent="…";
+  Q[d]??=[];
+  if(!Q[d].length)await pull(d);else if(Q[d].length<3)pull(d);
+  const c=Q[d].shift();
+  $("next").textContent="Carte suivante";
+  if(!c){$("bk").innerHTML="<b>📡</b><span>Connexion requise. Réessaie.</span>";return}
+  seen.add(c.t);cur=c;
+  const col=D[d].c,e=d.split(" ")[0];
+  $("card").style.setProperty("--c",col);
+  $("bk").innerHTML="<b>"+e+"</b><span>"+d.slice(e.length+1)+"</span>";
+  setTimeout(()=>{
+    $("fr").innerHTML=(c.i?'<img src="'+c.i+'" alt="">':'<div class="noimg"></div>')+
+      '<div class="body"><div class="tag">'+d+'</div><h2></h2><p></p><a target="_blank" rel="noopener" href="https://fr.wikipedia.org/wiki/'+encodeURIComponent(c.t.replace(/ /g,"_"))+'">Lire sur Wikipédia</a></div>';
+    $("fr").querySelector("h2").textContent=c.t;
+    $("fr").querySelector("p").textContent=c.x;
+    saveFav();
+  },350);
+}
+function flip(){if(!cur)return next();$("card").classList.add("open")}
+function fav(){
+  if(!cur)return;
+  const i=favs.findIndex(f=>f.t==cur.t);
+  i<0?favs.push({t:cur.t}):favs.splice(i,1);
+  saveFav();
+}
+function showFav(on){
+  const l=$("list");l.hidden=!on;
+  if(!on)return;
+  l.innerHTML="<h3>Favoris</h3>";
+  favs.forEach(f=>{const a=document.createElement("a");a.target="_blank";a.href="https://fr.wikipedia.org/wiki/"+encodeURIComponent(f.t.replace(/ /g,"_"));a.textContent=f.t;l.appendChild(a)});
+  if(!favs.length)l.innerHTML+="<p>Aucune carte sauvegardée.</p>";
+  const b=document.createElement("button");b.textContent="Fermer";b.onclick=()=>showFav(0);l.appendChild(b);
+}
+next();
+</script>
+</body>
+</html>
